@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 
-from flask import Flask
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from flask import Flask, render_template, request, url_for
+from gtts import gTTS
+import os
 import torch
+from transformers import MarianTokenizer, MarianMTModel
+from datetime import datetime
 
 app = Flask(__name__)
 
-def translate(text):
-    tokenizer = AutoTokenizer.from_pretrained("rajbhirud/eng-to-fra-model")
-    model = AutoModelForSeq2SeqLM.from_pretrained("rajbhirud/eng-to-fra-model")
+model_name = 'Helsinki-NLP/opus-mt-en-fr'
+tokenizer = MarianTokenizer.from_pretrained(model_name)
+model = MarianMTModel.from_pretrained(model_name)
 
+def translate(text):
     inputs = tokenizer(text, return_tensors="pt", max_length=64, truncation=True)
 
     with torch.no_grad():
@@ -19,9 +23,24 @@ def translate(text):
 
     return translated_text
 
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/translate', methods=['POST'])
+def translate_route():
+    text = request.form['text']
+    translation = translate(text)
+
+    tts = gTTS(translation, lang='fr')
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    audio_filename = f"translation_{timestamp}.mp3"
+    save_path = os.path.join("static", audio_filename)
+    tts.save(save_path)
+
+    return render_template('index.html', translation=translation, audio_file=audio_filename)
+
 if __name__ == "__main__":
-    print("English to French Translation")
-    while True:
-        text = input("Enter English text (control + c to exit): ")
-        translation = translate(text)
-        print("French translation:", translation)
+    os.makedirs('static', exist_ok=True)
+    app.run(debug=True, port=5555)
+
